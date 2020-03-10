@@ -16,9 +16,64 @@ extension-element-prefixes="exsl"
         <xsl:with-param name="comparer" select="exsl:node-set($IDs2/.)/*"></xsl:with-param>
       </xsl:call-template>
     </xsl:variable>
-    <root>
-      <xsl:copy-of select="exsl:node-set($output)"/>
-    </root>
+    <xsl:variable name="mergeList">
+      <xsl:copy-of select="exsl:node-set($output)//left-not-in-right/match/*"/>
+      <xsl:copy-of select="exsl:node-set($output)//left-not-in-right/mismatch/*"/>
+      <xsl:copy-of select="exsl:node-set($output)//right-not-in-left/mismatch/*"/>
+    </xsl:variable>
+   <xsl:variable name="merge-result">
+      <xsl:call-template name="merger">
+        <xsl:with-param name="input" select="exsl:node-set($mergeList)"/>
+      </xsl:call-template>
+    </xsl:variable>
+      <xsl:copy-of select="exsl:node-set($merge-result)"/>
+  </xsl:template>
+  <xsl:template name="merger" >
+    <xsl:param name="input" />
+    <xsl:if test="count(exsl:node-set($input)/*) = 1">
+      <xsl:copy-of select="exsl:node-set($input)/*"/>
+    </xsl:if>
+    <xsl:if test="count(exsl:node-set($input)/*) > 1"> 
+    <xsl:variable name="sibling-result">
+      <xsl:call-template name="merger">
+        <xsl:with-param name="input" select="exsl:node-set($input)/*[position() > 1 and not(position() > count(exsl:node-set($input)/*))]"/>
+      </xsl:call-template>
+    </xsl:variable>
+    <xsl:variable name="recurse-result">
+    <xsl:for-each select="exsl:node-set($sibling-result)/*">
+      <xsl:variable name="is-match">
+      <xsl:call-template name="match-node">
+        <xsl:with-param name="node1" select="exsl:node-set($input)/*[1]"/>
+        <xsl:with-param name="node2" select="."/>
+      </xsl:call-template>
+      </xsl:variable>
+      <xsl:if test="exsl:node-set($is-match)//match/*">
+        <xsl:variable name="surround"  select="name(exsl:node-set($input)/*[1])"/>
+        <xsl:element name="{$surround}">
+            <xsl:for-each select="exsl:node-set($input)/*[1]/@*">
+              <xsl:attribute name="{name(.)}">
+                <xsl:value-of select="."/>
+              </xsl:attribute>
+            </xsl:for-each>
+            <xsl:variable name="mergeList">
+              <xsl:copy-of select="exsl:node-set($input)/*[1]/*"/>
+              <xsl:copy-of select="exsl:node-set(.)/*"/>
+            </xsl:variable>            
+            <xsl:call-template name="merger">
+              <xsl:with-param name="input" select="exsl:node-set($mergeList)"/>
+            </xsl:call-template>
+        </xsl:element>                    
+      </xsl:if>
+      <xsl:if test="exsl:node-set($is-match)//mismatch/*">
+          <xsl:copy-of select="exsl:node-set(.)"/>
+      </xsl:if>
+    </xsl:for-each>
+    </xsl:variable>
+      <xsl:copy-of select="exsl:node-set($recurse-result)"/>
+      <xsl:if test="count(exsl:node-set($recurse-result)) = (count(exsl:node-set($input)/*) - 1)">
+        <xsl:copy-of select="exsl:node-set($input)/*[1]"/>
+      </xsl:if>
+    </xsl:if>
   </xsl:template>
   <!-- Main recursive looping algorithm through nodes or leaves in current branch -->
   <xsl:template name="procedure" >
